@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  mqtt-broker:
+    container_name: mqtt-broker
+    image: eclipse-mosquitto:2.0.15
+    volumes:
+      - ./mqtt-broker/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+  sensors:
+    build: ./sensors
+    container_name: sensors
+    depends_on:
+      - mqtt-broker
+  backend:
+    build: ./backend
+    container_name: fire-alarm-backend
+    depends_on:
+      - mqtt-broker
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mqtt-broker
+      - backend
