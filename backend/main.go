@@ -2,41 +2,71 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"math/rand"
+	"time"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
-var temperatureThreshold = 30.0
-var smokeThreshold = 50.0
-var co2Threshold = 500.0
+var isFire = false
 
-func messageHandler(client MQTT.Client, msg MQTT.Message) {
-	topic := msg.Topic()
-	payload := string(msg.Payload())
-	value, _ := strconv.ParseFloat(payload, 64)
+func publish(client MQTT.Client, topic string, value float64) {
+	token := client.Publish(topic, 0, false, fmt.Sprintf("%f", value))
+	token.Wait()
+}
 
-	if topic == "sensors/temperature" && value > temperatureThreshold {
-		fmt.Printf("ALERT! High temperature detected: %.2f\n", value)
-	} else if topic == "sensors/smoke" && value > smokeThreshold {
-		fmt.Printf("ALERT! High smoke level detected: %.2f\n", value)
-	} else if topic == "sensors/co2" && value > co2Threshold {
-		fmt.Printf("ALERT! High CO2 level detected: %.2f\n", value)
+func simulateSensors(client MQTT.Client) {
+	for {
+		var temperature, smoke, co2 float64
+
+		if isFire {
+			// Simulate higher values in fire case
+			temperature = 35.0 + rand.Float64()*(45.0-35.0)
+			smoke = 60.0 + rand.Float64()*(100.0-60.0)
+			co2 = 600.0 + rand.Float64()*(1000.0-600.0)
+		} else {
+			// Simulate lower values in unfire case
+			temperature = 15.0 + rand.Float64()*(30.0-15.0)
+			smoke = rand.Float64() * 50.0
+			co2 = rand.Float64() * 500.0
+		}
+
+		// Publish sensor data to the MQTT broker
+		publish(client, "sensors/temperature", temperature)
+		publish(client, "sensors/smoke", smoke)
+		publish(client, "sensors/co2", co2)
+
+		fmt.Printf("Published: Temperature=%.2f, Smoke=%.2f, CO2=%.2f (Fire Status: %t)\n", temperature, smoke, co2, isFire)
+
+		// Send data every 5 seconds
+		time.Sleep(5 * time.Second)
 	}
+}
+
+func handleFireStatus(client MQTT.Client) {
+	client.Subscribe("sensors/fireStatus", 0, func(client MQTT.Client, msg MQTT.Message) {
+		status := string(msg.Payload())
+		if status == "fire" {
+			isFire = true
+			fmt.Println("Fire mode activated")
+		} else if status == "unfire" {
+			isFire = false
+			fmt.Println("Unfire mode activated")
+		}
+	})
 }
 
 func main() {
 	broker := "tcp://mqtt-broker:1883"
-	opts := MQTT.NewClientOptions().AddBroker(broker).SetClientID("fire-alarm-backend")
+	opts := MQTT.NewClientOptions().AddBroker(broker).SetClientID("sensor-simulator")
 	client := MQTT.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 
-	client.Subscribe("sensors/temperature", 0, messageHandler)
-	client.Subscribe("sensors/smoke", 0, messageHandler)
-	client.Subscribe("sensors/co2", 0, messageHandler)
+	// Handle fire/unfire status
+	handleFireStatus(client)
 
-	fmt.Println("Subscribed to sensor topics, waiting for data...")
-	select {} // Keep the service running
+	// Simulate sensor data
+	simulateSensors(client)
 }
