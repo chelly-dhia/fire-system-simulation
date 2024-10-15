@@ -14,13 +14,16 @@ services:
     container_name: sensors
     depends_on:
       - mqtt-broker
+
   backend:
     build: ./backend
     container_name: fire-alarm-backend
     depends_on:
       - mqtt-broker
-  web:
-    build: ./web
+
+  ui:
+    build: ./ui
+    container_name: fire-alarm-ui
     ports:
       - "3000:3000"
     depends_on:
