@@ -26,6 +26,7 @@ services:
     container_name: co2-sensor
     depends_on:
       - mqtt-broker
+      
   backend:
     build: ./backend
     container_name: fire-alarm-backend

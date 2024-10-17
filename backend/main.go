@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	alarmActive   = false                  // Tracks alarm status
-	mqttBrokerURL = "tcp://localhost:1883" // MQTT broker address
-	clientID      = "alarm-system"         // Unique MQTT client ID
+	alarmActive   = false                    // Tracks alarm status
+	mqttBrokerURL = "tcp://mqtt-broker:1883" // Use the Docker service name
+	clientID      = "alarm-system"           // Unique MQTT client ID
 )
 
 // Publish message to MQTT topic
