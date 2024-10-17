@@ -14,32 +14,51 @@ export default function Home() {
   const client = mqtt.connect('ws://localhost:9001'); 
 
   useEffect(() => {
+    const topics = ['sensors/temperature', 'sensors/smoke', 'sensors/co2', 'alarm/status'];
+  
     // Subscribe to sensor topics on MQTT connection
     client.on('connect', () => {
       console.log('Connected to MQTT broker');
-      client.subscribe('sensors/temperature');
-      client.subscribe('sensors/smoke');
-      client.subscribe('sensors/co2');
-      client.subscribe('sensors/alarmStatus');
+      topics.forEach(topic => {
+        client.subscribe(topic, (err) => {
+          if (err) {
+            console.error(`Failed to subscribe to ${topic}:`, err);
+          } else {
+            console.log(`Subscribed to ${topic}`);
+          }
+        });
+      });
     });
-
+  
     // Handle incoming messages and update state
     client.on('message', (topic, message) => {
       const value = parseFloat(message.toString());
-
-      if (topic === 'sensors/temperature') setTemperature(value);
-      if (topic === 'sensors/smoke') setSmoke(value);
-      if (topic === 'sensors/co2') setCO2(value);
-
-      if (topic === 'sensors/alarmStatus') {
-        setAlarm(message.toString() === 'active');
+  
+      switch (topic) {
+        case 'sensors/temperature':
+          setTemperature(value);
+          break;
+        case 'sensors/smoke':
+          setSmoke(value);
+          break;
+        case 'sensors/co2':
+          setCO2(value);
+          break;
+        case 'alarm/status':
+          setAlarm(message.toString() === '1');
+          break;
+        default:
+          console.warn(`Unhandled topic: ${topic}`);
       }
     });
-
+  
     return () => {
-      client.end(); // Clean up MQTT connection
+      if (client) {
+        client.end(); // Clean up MQTT connection on unmount
+      }
     };
   }, []);
+  
 
   // Send fire or unfire status via MQTT
   const handleFireStatus = (status: string ) => {
