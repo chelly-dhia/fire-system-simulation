@@ -9,12 +9,23 @@ services:
       - "1883:1883"
       - "9001:9001"
 
-  sensors:
-    build: ./sensors
-    container_name: sensors
+  temperature-sensor:
+    build: ./sensors/temperature-sensor
+    container_name: temperature-sensor
     depends_on:
       - mqtt-broker
 
+  smoke-sensor:
+    build: ./sensors/smoke-sensor
+    container_name: smoke-sensor
+    depends_on:
+      - mqtt-broker
+
+  co2-sensor:
+    build: ./sensors/co2-sensor
+    container_name: co2-sensor
+    depends_on:
+      - mqtt-broker
   backend:
     build: ./backend
     container_name: fire-alarm-backend

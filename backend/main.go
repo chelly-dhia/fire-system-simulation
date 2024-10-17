@@ -2,71 +2,80 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"time"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
-var isFire = false
+var (
+	alarmActive   = false                  // Tracks alarm status
+	mqttBrokerURL = "tcp://localhost:1883" // MQTT broker address
+	clientID      = "alarm-system"         // Unique MQTT client ID
+)
 
-func publish(client MQTT.Client, topic string, value float64) {
-	token := client.Publish(topic, 0, false, fmt.Sprintf("%f", value))
+// Publish message to MQTT topic
+func publish(client MQTT.Client, topic string, message string) {
+	token := client.Publish(topic, 0, false, message)
 	token.Wait()
 }
 
-func simulateSensors(client MQTT.Client) {
-	for {
-		var temperature, smoke, co2 float64
+// Monitor sensor data and trigger alarm if conditions are met
+func monitorSensors(client MQTT.Client) {
+	client.Subscribe("sensors/+", 0, func(client MQTT.Client, msg MQTT.Message) {
+		value, _ := strconv.ParseFloat(string(msg.Payload()), 64)
+		topic := msg.Topic()
 
-		if isFire {
-			// Simulate higher values in fire case
-			temperature = 35.0 + rand.Float64()*(45.0-35.0)
-			smoke = 60.0 + rand.Float64()*(100.0-60.0)
-			co2 = 600.0 + rand.Float64()*(1000.0-600.0)
-		} else {
-			// Simulate lower values in unfire case
-			temperature = 15.0 + rand.Float64()*(30.0-15.0)
-			smoke = rand.Float64() * 50.0
-			co2 = rand.Float64() * 500.0
-		}
+		fmt.Printf("Received %s: %.2f\n", topic, value)
 
-		// Publish sensor data to the MQTT broker
-		publish(client, "sensors/temperature", temperature)
-		publish(client, "sensors/smoke", smoke)
-		publish(client, "sensors/co2", co2)
-
-		fmt.Printf("Published: Temperature=%.2f, Smoke=%.2f, CO2=%.2f (Fire Status: %t)\n", temperature, smoke, co2, isFire)
-
-		// Send data every 5 seconds
-		time.Sleep(5 * time.Second)
-	}
-}
-
-func handleFireStatus(client MQTT.Client) {
-	client.Subscribe("sensors/fireStatus", 0, func(client MQTT.Client, msg MQTT.Message) {
-		status := string(msg.Payload())
-		if status == "fire" {
-			isFire = true
-			fmt.Println("Fire mode activated")
-		} else if status == "unfire" {
-			isFire = false
-			fmt.Println("Unfire mode activated")
+		// Check if any sensor reading exceeds threshold
+		if (topic == "sensors/temperature" && value > 30) ||
+			(topic == "sensors/smoke" && value > 50) ||
+			(topic == "sensors/co2" && value > 500) {
+			if !alarmActive {
+				activateAlarm(client)
+			}
+		} else if alarmActive {
+			deactivateAlarm(client)
 		}
 	})
 }
 
+// Activate the alarm and notify UI
+func activateAlarm(client MQTT.Client) {
+	alarmActive = true
+	fmt.Println("ALARM ACTIVATED!")
+	publish(client, "alarm/status", "1") // Notify UI: alarm active
+}
+
+// Deactivate the alarm and notify UI
+func deactivateAlarm(client MQTT.Client) {
+	alarmActive = false
+	fmt.Println("ALARM DEACTIVATED!")
+	publish(client, "alarm/status", "0") // Notify UI: alarm inactive
+}
+
 func main() {
-	broker := "tcp://mqtt-broker:1883"
-	opts := MQTT.NewClientOptions().AddBroker(broker).SetClientID("sensor-simulator")
+	// Setup MQTT client
+	opts := MQTT.NewClientOptions().AddBroker(mqttBrokerURL).SetClientID(clientID)
 	client := MQTT.NewClient(opts)
+
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		panic(token.Error())
+		fmt.Println("MQTT Connection Error:", token.Error())
+		return
 	}
+	fmt.Println("Connected to MQTT Broker")
 
-	// Handle fire/unfire status
-	handleFireStatus(client)
+	// Monitor sensors for alarm conditions
+	monitorSensors(client)
 
-	// Simulate sensor data
-	simulateSensors(client)
+	// Handle termination gracefully
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	fmt.Println("Shutting down...")
+	client.Disconnect(250)
 }
