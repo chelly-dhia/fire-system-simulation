@@ -9,6 +9,8 @@ export default function Home() {
   const [smoke, setSmoke] = useState(0);
   const [co2, setCO2] = useState(0);
   const [alarm, setAlarm] = useState(false);
+  const [timeElapsed, setTimeElapsed] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
   // Connect to MQTT broker using WebSocket
   const client = mqtt.connect('ws://localhost:9001'); 
@@ -46,6 +48,11 @@ export default function Home() {
           break;
         case 'alarm/status':
           setAlarm(message.toString() === '1');
+
+          if (message.toString() === '1' && startTime !== null) {
+            const endTime = new Date().getTime();
+            setTimeElapsed((endTime - startTime) / 1000); // Calculate time in seconds
+          }
           break;
         default:
           console.warn(`Unhandled topic: ${topic}`);
@@ -57,12 +64,16 @@ export default function Home() {
         client.end(); // Clean up MQTT connection on unmount
       }
     };
-  }, []);
+  }, [startTime]);
   
-
   // Send fire or unfire status via MQTT
-  const handleFireStatus = (status: string ) => {
+  const handleFireStatus = (status: string) => {
     client.publish('sensors/fireStatus', status);
+
+    if (status === 'fire') {
+      setStartTime(new Date().getTime()); // Start the timer
+      setTimeElapsed(null); // Reset timer
+    }
   };
 
   return (
@@ -113,6 +124,14 @@ export default function Home() {
             </p>
           </div>
         </div>
+
+        {/* Timer Display */}
+        {timeElapsed !== null && (
+          <div className="p-4 bg-gray-50 rounded-lg shadow text-center">
+            <h2 className="text-lg font-semibold text-gray-600">Time Elapsed</h2>
+            <p className="text-2xl font-bold text-gray-700">{timeElapsed} seconds</p>
+          </div>
+        )}
 
         {/* Fire/Unfire Control Buttons */}
         <div className="flex space-x-4">
